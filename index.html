@@ -8613,8 +8613,14 @@ window.addEventListener('DOMContentLoaded', async function() {
 }
 
           updateUserInfo();
-     loadUserBalances(); // শুধু ব্যালেন্স লোড হবে
-           console.log("Session restored successfully for:", currentUser.uid);
+          loadUserBalances(); 
+          
+          // ===== এই ২ লাইন যোগ করা হলো =====
+          showPage('homePage');
+          openAccountActiveModal();
+          // ====================================
+          
+          console.log("Session restored successfully for:", currentUser.uid);
       }
     } catch (error) {
       console.error("Session restore error:", error);

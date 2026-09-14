@@ -4249,6 +4249,63 @@
 <body>
 
 <!-- ==========================================
+     CUSTOM APP SPLASH SCREEN (Loading Design)
+========================================== -->
+<style>
+  #appSplashScreen {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: linear-gradient(135deg, #0f2027 0%, #0d5c46 60%, #023e11 100%);
+    z-index: 999999;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; transition: opacity 0.5s ease;
+  }
+  
+  .splash-logo {
+    width: 110px; height: 110px; border-radius: 24px; margin-bottom: 25px;
+    box-shadow: 0 15px 35px rgba(0,0,0,0.4);
+    animation: splashPulse 2s infinite ease-in-out;
+  }
+  @keyframes splashPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+  }
+  
+  .splash-title {
+    color: #ffffff; font-size: 28px; font-weight: 800; margin-bottom: 30px;
+    letter-spacing: 1px; text-shadow: 0 2px 10px rgba(0,0,0,0.3);
+  }
+  
+  .splash-spinner {
+    width: 40px; height: 40px; border: 4px solid rgba(255,255,255,0.2);
+    border-top-color: #ffffff; border-radius: 50%;
+    animation: splashSpin 1s linear infinite;
+  }
+  @keyframes splashSpin { to { transform: rotate(360deg); } }
+</style>
+
+<div id="appSplashScreen">
+    <img src="https://i.postimg.cc/rmq4tmDL/Chat-GPT-Image-Aug-5-2026-12-05-05-AM.png" alt="Global Earn Logo" class="splash-logo">
+    <h1 class="splash-title">Global Earn</h1>
+    <div class="splash-spinner"></div>
+</div>
+
+<script>
+  // ওয়েবসাইটের সব কোড, ছবি ও স্ক্রিপ্ট পুরোপুরি লোড হওয়া পর্যন্ত অপেক্ষা করবে
+  window.addEventListener('load', function() {
+    // লোড হওয়ার পর অর্ধেক সেকেন্ড (৫০০ মিলিসেকেন্ড) ব্রেক দিয়ে স্প্ল্যাশ স্ক্রিন সরাবে
+    // এতে ইউজারের কাছে অ্যাপটি খুব স্মুথ মনে হবে
+    setTimeout(function() {
+      const splash = document.getElementById('appSplashScreen');
+      if (splash) {
+        splash.style.opacity = '0';
+        setTimeout(() => splash.style.display = 'none', 500);
+      }
+    }, 500); 
+  });
+</script>
+<!-- ============== END OF SPLASH SCREEN ============== -->
+
+<!-- ==========================================
      PROFESSIONAL APP LANDING / DOWNLOAD PAGE
 ========================================== -->
 <style>

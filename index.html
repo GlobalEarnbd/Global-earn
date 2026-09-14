@@ -7061,22 +7061,19 @@ async function handleRegister() {
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
 
-        // ===== FALLBACK CHECK: Block হয়নি কিন্তু সত্যিই Duplicate হতে পারে (৫%) =====
+    // ===== FALLBACK CHECK: Browser Delete / Dual Space (IP Check) =====
     setTimeout(async () => {
       try {
-        // ওই ডিভাইসের সব ইউজার বের করা হচ্ছে
-        const recheckFingerprint = await db.collection('users')
-          .where('identity', '==', currentDeviceIdentity)
+        // যেহেতু ব্রাউজার ডিলিট করেছে, ফিঙ্গারপ্রিন্ট বদলে গেছে। তাই IP দিয়ে চেক করতে হবে।
+        const ipCheck = await db.collection('users')
+          .where('ipAddress', '==', currentUserIP)
           .get();
         
-        let duplicateFound = false;
-        let accountsList = [];
-        
-        if (recheckFingerprint.size > 1) {
-          duplicateFound = true;
+        if (ipCheck.size > 1) {
+          // IP দিয়ে মিলে গেছে, মানে ডুপ্লিকেট!
+          let accountsList = [];
           
-          // সব একাউন্টের তথ্য এবং ব্যালেন্স বের করা হচ্ছে
-          for (const doc of recheckFingerprint.docs) {
+          for (const doc of ipCheck.docs) {
             const uData = doc.data();
             
             // প্রতিটি একাউন্টের মোট ব্যালেন্স ক্যালকুলেট করা হচ্ছে
@@ -7092,13 +7089,12 @@ async function handleRegister() {
               docId: doc.id,
               phone: uData.phone || 'N/A',
               balance: balance.toFixed(2),
-              isBanned: uData.isBanned || false
+              isBanned: uData.isBanned || false,
+              deviceFingerprint: uData.identity || 'N/A'
             });
           }
-        }
-        
-        // যদি ডুপ্লিকেট পাওয়া যায়, তবে সব একাউন্টের লিস্ট সহ এডমিন প্যানেলে এলার্ট পাঠানো হচ্ছে
-        if (duplicateFound && accountsList.length > 0) {
+          
+          // সব একাউন্টের লিস্ট সহ এডমিন প্যানেলে এলার্ট পাঠানো হচ্ছে
           await db.collection('duplicateAlerts').add({
             type: 'bypassed_block',
             newUserId: String(newId),
@@ -7109,7 +7105,7 @@ async function handleRegister() {
             allAccounts: accountsList, // সব একাউন্টের লিস্ট এখানে সেভ হবে
             referredBy: referrerUID || null,
             status: 'pending',
-            warning: 'এই ইউজার Block হওয়া সত্ত্বেও একাউন্ট তৈরি করেছে!',
+            warning: 'ব্রাউজার ডিলিট/ডুয়েল স্পেস করে একাউন্ট তৈরি করেছে!',
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
           });
           

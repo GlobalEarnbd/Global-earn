@@ -6574,21 +6574,20 @@
     <div class="form-card" style="border: 2px solid #EF4444;">
         <h3 style="font-size: 15px; color: #DC2626;"><i class="fa-solid fa-triangle-exclamation"></i> All Duplicate Alerts</h3>
         
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>Type</th>
-                    <th>New Phone</th>
-                    <th>Existing User</th>
-                    <th>IP</th>
-                    <th>Status</th>
-                    <th>Action</th>
-                </tr>
-            </thead>
-            <tbody id="adminDuplicateAlertsBody">
-                <tr><td colspan="6" style="text-align:center; padding:15px; color:#64748b;">No alerts</td></tr>
-            </tbody>
-        </table>
+       <table class="data-table">
+    <thead>
+        <tr>
+            <th>Type</th>
+            <th>All Accounts & Balance</th>
+            <th>IP</th>
+            <th>Status</th>
+            <th>Action</th>
+        </tr>
+    </thead>
+    <tbody id="adminDuplicateAlertsBody">
+        <tr><td colspan="5" style="text-align:center; padding:15px; color:#64748b;">No alerts</td></tr>
+    </tbody>
+</table>
     </div>
 </section>
 
@@ -7062,45 +7061,52 @@ async function handleRegister() {
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
 
-    // ===== FALLBACK CHECK: Block হয়নি কিন্তু সত্যিই Duplicate হতে পারে (৫%) =====
+        // ===== FALLBACK CHECK: Block হয়নি কিন্তু সত্যিই Duplicate হতে পারে (৫%) =====
     setTimeout(async () => {
       try {
+        // ওই ডিভাইসের সব ইউজার বের করা হচ্ছে
         const recheckFingerprint = await db.collection('users')
           .where('identity', '==', currentDeviceIdentity)
           .get();
         
         let duplicateFound = false;
-        let existingUser = null;
+        let accountsList = [];
         
         if (recheckFingerprint.size > 1) {
           duplicateFound = true;
-          existingUser = recheckFingerprint.docs[0].data();
-        }
-        
-        if (!duplicateFound) {
-          const ipCheck = await db.collection('users')
-            .where('ipAddress', '==', currentUserIP)
-            .get();
           
-          if (ipCheck.size > 1) {
-            duplicateFound = true;
-            const otherDocs = ipCheck.docs.filter(d => d.id !== newUserRef.id);
-            if (otherDocs.length > 0) {
-              existingUser = otherDocs[0].data();
-            }
+          // সব একাউন্টের তথ্য এবং ব্যালেন্স বের করা হচ্ছে
+          for (const doc of recheckFingerprint.docs) {
+            const uData = doc.data();
+            
+            // প্রতিটি একাউন্টের মোট ব্যালেন্স ক্যালকুলেট করা হচ্ছে
+            const balance = (Number(uData.gmailSellBalance)||0) + 
+                            (Number(uData.facebookSellBalance)||0) + 
+                            (Number(uData.instagramSellBalance)||0) + 
+                            (Number(uData.referBalance)||0) + 
+                            (Number(uData.targetBalance)||0) + 
+                            (Number(uData.giftBalance)||0);
+            
+            accountsList.push({
+              uid: String(uData.uid || doc.id),
+              docId: doc.id,
+              phone: uData.phone || 'N/A',
+              balance: balance.toFixed(2),
+              isBanned: uData.isBanned || false
+            });
           }
         }
         
-        if (duplicateFound && existingUser) {
+        // যদি ডুপ্লিকেট পাওয়া যায়, তবে সব একাউন্টের লিস্ট সহ এডমিন প্যানেলে এলার্ট পাঠানো হচ্ছে
+        if (duplicateFound && accountsList.length > 0) {
           await db.collection('duplicateAlerts').add({
             type: 'bypassed_block',
             newUserId: String(newId),
             newUserDocId: newUserRef.id,
             newUserPhone: phone,
-            existingUserId: String(existingUser.uid),
-            existingUserPhone: existingUser.phone || 'N/A',
             deviceFingerprint: currentDeviceIdentity,
             ipAddress: currentUserIP,
+            allAccounts: accountsList, // সব একাউন্টের লিস্ট এখানে সেভ হবে
             referredBy: referrerUID || null,
             status: 'pending',
             warning: 'এই ইউজার Block হওয়া সত্ত্বেও একাউন্ট তৈরি করেছে!',
@@ -8612,7 +8618,7 @@ window.addEventListener('DOMContentLoaded', async function() {
     return; // বাকি ফাংশন আর রান করবে না
 }
 
-          updateUserInfo();
+                    updateUserInfo();
           loadUserBalances(); 
           
           // ===== এই ২ লাইন যোগ করা হলো =====
@@ -11037,100 +11043,98 @@ let unsubscribeDuplicateAlerts = null;
 function loadAdminDuplicateAlerts() {
     const tbody = document.getElementById('adminDuplicateAlertsBody');
     if (!tbody) return;
-    
-    let blockedCount = 0;
-    let bypassedCount = 0;
-    
-    if (unsubscribeDuplicateAlerts) unsubscribeDuplicateAlerts();
-    
-    unsubscribeDuplicateAlerts = db.collection('duplicateAlerts')
+
+    db.collection('duplicateAlerts')
         .orderBy('createdAt', 'desc')
-        .limit(50)
+        .limit(20)
         .onSnapshot((snapshot) => {
+            let blockedCount = 0;
+            let bypassedCount = 0;
             tbody.innerHTML = '';
-            blockedCount = 0;
-            bypassedCount = 0;
-            
+
             if (snapshot.empty) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:15px; color:#64748b;">No alerts</td></tr>';
-                document.getElementById('blockedCount').textContent = '0';
-                document.getElementById('bypassedCount').textContent = '0';
-                return;
-            }
-            
-            snapshot.forEach((doc) => {
-                const data = doc.data();
-                
-                if (data.type === 'blocked_attempt') blockedCount++;
-                if (data.type === 'bypassed_block') bypassedCount++;
-                
-                let typeBadge = '';
-                if (data.type === 'blocked_attempt') {
-                    typeBadge = '<span class="badge-active" style="background:#fee2e2; color:#dc2626;">🚫 Blocked</span>';
-                } else {
-                    typeBadge = '<span class="badge-pending">⚠️ Bypassed</span>';
-                }
-                
-                let statusBadge = '';
-                if (data.status === 'blocked') {
-                    statusBadge = '<span class="badge-active">Blocked</span>';
-                } else if (data.status === 'banned') {
-                    statusBadge = '<span class="badge-used">Banned</span>';
-                } else if (data.status === 'allowed') {
-                    statusBadge = '<span class="badge-approved">Allowed</span>';
-                } else {
-                    statusBadge = '<span class="badge-pending">Pending</span>';
-                }
-                
-                let actionBtn = '';
-                if (data.status === 'pending' && data.type === 'bypassed_block') {
-                    actionBtn = `
-                        <button class="btn-approve" onclick="adminResolveDuplicate('${doc.id}', '${data.newUserDocId}', 'allow')">Allow</button>
-                        <button class="btn-reject" onclick="adminResolveDuplicate('${doc.id}', '${data.newUserDocId}', 'ban')">Ban</button>
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:15px; color:#64748b;">No alerts</td></tr>';
+            } else {
+                snapshot.forEach((doc) => {
+                    const data = doc.data();
+                    if (data.type === 'bypassed_block') bypassedCount++;
+                    else blockedCount++;
+
+                    // সব একাউন্টের লিস্ট তৈরি করা হচ্ছে
+                    let accountsHtml = '<div style="display:flex; flex-direction:column; gap:6px; min-width:250px;">';
+                    
+                    if (data.allAccounts && data.allAccounts.length > 0) {
+                        data.allAccounts.forEach(acc => {
+                            const banBtnText = acc.isBanned ? 'Banned' : 'Ban';
+                            const banBtnStyle = acc.isBanned ? 'background:#6b7280; cursor:not-allowed;' : 'background:#dc2626; cursor:pointer;';
+                            
+                            accountsHtml += `
+                                <div style="display:flex; justify-content:space-between; align-items:center; background:#f8fafc; padding:4px 8px; border-radius:4px; border-left:3px solid #dc2626;">
+                                    <div style="font-size:11px;">
+                                        <div style="font-weight:bold; color:#333;">${acc.phone}</div>
+                                        <div style="color:#666;">UID: ${acc.uid}</div>
+                                    </div>
+                                    <div style="display:flex; align-items:center; gap:8px;">
+                                        <span style="font-weight:bold; color:#16a34a; font-size:12px;">৳ ${acc.balance}</span>
+                                        <button onclick="adminBanDuplicateAccount('${acc.docId}')" style="padding:3px 8px; font-size:10px; color:white; border:none; border-radius:3px; ${banBtnStyle}" ${acc.isBanned ? 'disabled' : ''}>
+                                            ${banBtnText}
+                                        </button>
+                                    </div>
+                                </div>
+                            `;
+                        });
+                    } else {
+                        // পুরোনো ডাটার জন্য ফলব্যাক
+                        accountsHtml += `<div style="font-size:11px;">New: ${data.newUserPhone || 'N/A'}<br>Old: ${data.existingUserPhone || 'N/A'}</div>`;
+                    }
+                    accountsHtml += '</div>';
+
+                    tbody.innerHTML += `
+                        <tr>
+                            <td style="font-size:11px;">${data.type === 'bypassed_block' ? 'Bypassed' : 'Blocked'}</td>
+                            <td>${accountsHtml}</td>
+                            <td style="font-size:10px; color:#888;">${data.ipAddress || 'N/A'}</td>
+                            <td>${data.status === 'pending' ? '<span class="badge-pending">Pending</span>' : '<span class="badge-active">Reviewed</span>'}</td>
+                            <td>
+                                <button onclick="adminResolveAlert('${doc.id}')" class="btn-approve" style="width:100%; padding:5px;">Resolve</button>
+                            </td>
+                        </tr>
                     `;
-                } else {
-                    actionBtn = '<span style="color:#94a3b8; font-size:11px;">Resolved</span>';
-                }
-                
-                tbody.innerHTML += `
-                    <tr>
-                        <td>${typeBadge}</td>
-                        <td>${data.newPhone || data.newUserPhone || 'N/A'}</td>
-                        <td>UID: ${data.existingUserId || 'N/A'}<br><small>${data.existingUserPhone || 'N/A'}</small></td>
-                        <td><small>${data.ipAddress || 'N/A'}</small></td>
-                        <td>${statusBadge}</td>
-                        <td>${actionBtn}</td>
-                    </tr>
-                `;
-            });
-            
-            document.getElementById('blockedCount').textContent = blockedCount;
-            document.getElementById('bypassedCount').textContent = bypassedCount;
+                });
+            }
+
+            // কাউন্টার আপডেট
+            const blockedEl = document.getElementById('blockedCount');
+            const bypassedEl = document.getElementById('bypassedCount');
+            if(blockedEl) blockedEl.innerText = blockedCount;
+            if(bypassedEl) bypassedEl.innerText = bypassedCount;
+
+        }, (error) => {
+            console.error("Admin duplicate alerts load error:", error);
         });
 }
 
-async function adminResolveDuplicate(alertId, newUserDocId, action) {
+// নতুন ফাংশন: ডুপ্লিকেট একাউন্ট ব্যান করার জন্য
+async function adminBanDuplicateAccount(docId) {
     try {
-        if (action === 'ban') {
-            await db.collection('users').doc(newUserDocId).update({
-                isBanned: true,
-                banReason: 'Duplicate account detected (Bypassed block)'
-            });
-            
-            await db.collection('duplicateAlerts').doc(alertId).update({
-                status: 'banned',
-                resolvedAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
-            
-            showToast('User banned successfully!', 'success');
-        } else {
-            await db.collection('duplicateAlerts').doc(alertId).update({
-                status: 'allowed',
-                resolvedAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
-            
-            showToast('User allowed. Alert resolved.', 'success');
-        }
+        await db.collection('users').doc(docId).update({
+            isBanned: true,
+            banReason: 'Fake/Duplicate account auto-banned from alerts',
+            accountStatus: 'inactive'
+        });
+        showToast('Account Banned Successfully!', 'success');
+    } catch (error) {
+        showToast('Ban failed: ' + error.message, 'error');
+    }
+}
+
+// নতুন ফাংশন: এলার্ট রিজলভ করার জন্য
+async function adminResolveAlert(alertId) {
+    try {
+        await db.collection('duplicateAlerts').doc(alertId).update({
+            status: 'reviewed'
+        });
+        showToast('Alert marked as reviewed!', 'success');
     } catch (error) {
         showToast('Error: ' + error.message, 'error');
     }

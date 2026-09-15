@@ -1,0 +1,12 @@
+{
+  "background_color": "#ffffff",
+  "dir": "ltr",
+  "display": "standalone",
+  "name": "globalearnbd.com",
+  "orientation": "any",
+  "scope": "/",
+  "short_name": "globalearn",
+  "start_url": "/",
+  "theme_color": "#0d5c46",
+  "id": "globalearnbd.com"
+}
